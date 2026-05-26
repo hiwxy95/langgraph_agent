@@ -8,7 +8,7 @@ import {
   createConversation,
   getConversation,
   listConversations,
-  sendMessage,
+  streamMessage,
   submitApproval,
 } from './services/api'
 import type {
@@ -18,6 +18,7 @@ import type {
   Conversation,
   Message,
   ModelProvider,
+  StreamEvent,
 } from './types/api'
 
 const conversations = ref<Conversation[]>([])
@@ -30,6 +31,7 @@ const sending = ref(false)
 const error = ref<string | null>(null)
 const modelProvider = ref<ModelProvider>('auto')
 const messageViewport = ref<HTMLElement | null>(null)
+const streamingMessageId = ref<string | null>(null)
 
 const activeConversation = computed(() =>
   conversations.value.find((conversation) => conversation.id === activeId.value) ?? null,
@@ -85,26 +87,38 @@ async function selectConversation(id: string): Promise<void> {
 
 async function handleSend(content: string): Promise<void> {
   if (!activeId.value) return
-  const optimistic: Message = {
-    id: `local-${Date.now()}`,
+
+  const userMessage: Message = {
+    id: `local-user-${Date.now()}`,
     role: 'user',
     content,
     metadata: {},
     created_at: new Date().toISOString(),
   }
-  messages.value.push(optimistic)
+  const assistantMessage: Message = {
+    id: `stream-assistant-${Date.now()}`,
+    role: 'assistant',
+    content: '',
+    metadata: {},
+    created_at: new Date().toISOString(),
+  }
+
+  messages.value.push(userMessage, assistantMessage)
+  streamingMessageId.value = assistantMessage.id
   sending.value = true
   error.value = null
   pendingApproval.value = null
   await scrollToBottom()
+
   try {
-    const response = await sendMessage(activeId.value, content, modelProvider.value)
-    applyAgentResponse(response)
+    await streamMessage(activeId.value, content, modelProvider.value, applyStreamEvent)
     await refreshConversations()
   } catch (err) {
     error.value = normalizeError(err)
+    removeEmptyStreamingMessage()
   } finally {
     sending.value = false
+    streamingMessageId.value = null
     await scrollToBottom()
   }
 }
@@ -115,7 +129,6 @@ async function handleApproval(action: ApprovalAction, comment?: string): Promise
   error.value = null
   try {
     const response = await submitApproval(activeId.value, action, comment)
-    pendingApproval.value = response.approval_payload
     applyAgentResponse(response)
     if (!response.requires_human_approval) {
       pendingApproval.value = null
@@ -129,12 +142,56 @@ async function handleApproval(action: ApprovalAction, comment?: string): Promise
   }
 }
 
+function applyStreamEvent(event: StreamEvent): void {
+  if (event.event === 'token') {
+    const target = messages.value.find((message) => message.id === streamingMessageId.value)
+    if (target) {
+      target.content += event.text ?? ''
+    }
+    void scrollToBottom()
+    return
+  }
+
+  if (event.event === 'message' && event.message) {
+    const index = messages.value.findIndex((message) => message.id === streamingMessageId.value)
+    if (index >= 0) {
+      messages.value[index] = event.message
+    } else {
+      messages.value.push(event.message)
+    }
+    void scrollToBottom()
+    return
+  }
+
+  if (event.event === 'approval') {
+    pendingApproval.value = event.approval_payload ?? null
+    return
+  }
+
+  if (event.event === 'error') {
+    error.value = event.error ?? '请求失败'
+    removeEmptyStreamingMessage()
+    return
+  }
+
+  if (event.event === 'done') {
+    streamingMessageId.value = null
+  }
+}
+
 function applyAgentResponse(response: AgentResponse): void {
   if (response.error) {
     error.value = response.error
   }
   messages.value.push(...response.messages)
   pendingApproval.value = response.requires_human_approval ? response.approval_payload : null
+}
+
+function removeEmptyStreamingMessage(): void {
+  const index = messages.value.findIndex((message) => message.id === streamingMessageId.value)
+  if (index >= 0 && !messages.value[index].content) {
+    messages.value.splice(index, 1)
+  }
 }
 
 async function scrollToBottom(): Promise<void> {
@@ -175,7 +232,11 @@ function normalizeError(err: unknown): string {
             <h3>从一句需求开始</h3>
             <p>例如：帮我规划广州两日游，想看历史建筑和夜景，预算中等。</p>
           </div>
-          <MessageBubble v-for="message in messages" :key="message.id || message.content" :message="message" />
+          <MessageBubble
+            v-for="message in messages"
+            :key="message.id || message.content"
+            :message="message"
+          />
           <div v-if="sending" class="state-line">智能体处理中...</div>
           <div v-if="error" class="error-line">{{ error }}</div>
         </template>

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessageChunk, BaseMessage
 from langchain_openai import ChatOpenAI
 
 from app.core.config import ModelProvider, Settings, get_settings
@@ -102,6 +103,40 @@ class LLMRouter:
                 fallback_from=provider,
             )
 
+    async def stream(
+        self,
+        messages: list[BaseMessage],
+        task_type: TaskType = "chat",
+        hints: dict[str, Any] | None = None,
+        model_provider: ModelProvider = "auto",
+    ) -> AsyncIterator[tuple[str, RoutedLLMResult | str]]:
+        provider = self.select_provider(task_type, model_provider, hints)
+        fallback = "qwen" if provider == "deepseek" else "deepseek"
+
+        try:
+            async for chunk in self._stream_from_provider(provider, messages):
+                yield ("token", chunk)
+            yield (
+                "done",
+                RoutedLLMResult(
+                    content="",
+                    provider=provider,
+                    model=self._model_name(provider),
+                ),
+            )
+        except Exception:
+            async for chunk in self._stream_from_provider(fallback, messages):
+                yield ("token", chunk)
+            yield (
+                "done",
+                RoutedLLMResult(
+                    content="",
+                    provider=fallback,
+                    model=self._model_name(fallback),
+                    fallback_from=provider,
+                ),
+            )
+
     def chat_model(
         self,
         task_type: TaskType = "chat",
@@ -115,3 +150,28 @@ class LLMRouter:
         if provider == "deepseek":
             return self.settings.deepseek_model
         return self.settings.qwen_model
+
+    async def _stream_from_provider(
+        self, provider: Literal["deepseek", "qwen"], messages: list[BaseMessage]
+    ) -> AsyncIterator[str]:
+        async for chunk in self.get_client(provider).astream(messages):
+            text = self._chunk_to_text(chunk)
+            if text:
+                yield text
+
+    @staticmethod
+    def _chunk_to_text(chunk: AIMessageChunk | Any) -> str:
+        content = getattr(chunk, "content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text", "")))
+                elif hasattr(item, "get"):
+                    parts.append(str(item.get("text", "")))
+            return "".join(parts)
+        return str(content or "")

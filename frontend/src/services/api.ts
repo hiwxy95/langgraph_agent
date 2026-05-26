@@ -4,6 +4,7 @@ import type {
   Conversation,
   ConversationDetail,
   ModelProvider,
+  StreamEvent,
 } from '../types/api'
 
 const jsonHeaders = {
@@ -45,6 +46,45 @@ export async function sendMessage(
     headers: jsonHeaders,
     body: JSON.stringify({ content, model_provider: modelProvider }),
   })
+}
+
+export async function streamMessage(
+  id: string,
+  content: string,
+  modelProvider: ModelProvider,
+  onEvent: (event: StreamEvent) => void,
+): Promise<void> {
+  const response = await fetch(`/api/conversations/${id}/messages/stream`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ content, model_provider: modelProvider }),
+  })
+
+  if (!response.ok || !response.body) {
+    const body = await response.text()
+    throw new Error(body || `HTTP ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    const chunks = buffer.split('\n\n')
+    buffer = chunks.pop() ?? ''
+
+    for (const chunk of chunks) {
+      const dataLine = chunk
+        .split('\n')
+        .find((line) => line.startsWith('data: '))
+      if (!dataLine) continue
+      onEvent(JSON.parse(dataLine.slice(6)) as StreamEvent)
+    }
+  }
 }
 
 export async function submitApproval(

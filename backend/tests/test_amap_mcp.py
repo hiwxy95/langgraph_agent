@@ -1,5 +1,5 @@
-from typing import Any
 import asyncio
+from typing import Any
 
 from langchain_core.tools import StructuredTool
 
@@ -11,21 +11,18 @@ async def fake_tool(
     origin: str | None = None,
     destination: str | None = None,
     city: str | None = None,
-    mode: str | None = None,
     keywords: str | None = None,
-    types: str | None = None,
-    location: str | None = None,
-    radius: int | None = None,
+    address: str | None = None,
+    strategy: str | None = None,
 ) -> dict[str, Any]:
+    if address:
+        return {"geocodes": [{"location": "113.321,23.106"}], "address": address}
     return {
         "origin": origin,
         "destination": destination,
         "city": city,
-        "mode": mode,
         "keywords": keywords,
-        "types": types,
-        "location": location,
-        "radius": radius,
+        "strategy": strategy,
     }
 
 
@@ -37,50 +34,68 @@ def make_tool(name: str, description: str) -> StructuredTool:
     )
 
 
-def test_search_hotels_uses_hotel_tool_and_poi_type() -> None:
+def test_search_hotels_uses_text_search_without_unsupported_filters() -> None:
     async def run() -> None:
         client = AmapMCPClient(Settings(amap_maps_api_key="key"))
-        client._tools = [make_tool("maps_text_search", "poi search 酒店 景点")]
+        client._tools = [make_tool("maps_text_search", "poi text search")]
 
         result = await client.search_hotels(city="广州", keyword="天河酒店")
 
         assert result.tool_name == "maps_text_search"
         assert result.content["city"] == "广州"
         assert result.content["keywords"] == "天河酒店"
-        assert result.content["types"] == "100000"
+        assert "types" not in result.content
 
     asyncio.run(run())
 
 
-def test_search_attractions_uses_attraction_type() -> None:
+def test_search_attractions_uses_text_search_without_unsupported_filters() -> None:
     async def run() -> None:
         client = AmapMCPClient(Settings(amap_maps_api_key="key"))
-        client._tools = [make_tool("maps_text_search", "poi search 景点")]
+        client._tools = [make_tool("maps_text_search", "poi text search")]
 
         result = await client.search_attractions(city="广州", keyword="博物馆")
 
         assert result.tool_name == "maps_text_search"
         assert result.content["city"] == "广州"
         assert result.content["keywords"] == "博物馆"
-        assert result.content["types"] == "110000"
+        assert "types" not in result.content
 
     asyncio.run(run())
 
 
-def test_plan_route_can_use_explicit_tool_name() -> None:
+def test_plan_route_uses_known_city_center_locations() -> None:
     async def run() -> None:
-        client = AmapMCPClient(
-            Settings(amap_maps_api_key="key", amap_route_tool="route_tool")
-        )
-        client._tools = [make_tool("route_tool", "route planning")]
+        client = AmapMCPClient(Settings(amap_maps_api_key="key"))
+        client._tools = [make_tool("maps_direction_driving", "direction route driving")]
 
         result = await client.plan_route(
-            origin="广州塔", destination="陈家祠", mode="driving"
+            origin="深圳", destination="汕头", city="汕头", mode="driving"
         )
 
-        assert result.tool_name == "route_tool"
-        assert result.content["origin"] == "广州塔"
-        assert result.content["destination"] == "陈家祠"
-        assert result.content["mode"] == "driving"
+        assert result.tool_name == "maps_direction_driving"
+        assert result.content["origin"] == "114.057868,22.543099"
+        assert result.content["destination"] == "116.681972,23.354091"
+        assert result.content["strategy"] == "0"
+
+    asyncio.run(run())
+
+
+def test_plan_route_geocodes_unknown_addresses_before_route_call() -> None:
+    async def run() -> None:
+        client = AmapMCPClient(Settings(amap_maps_api_key="key"))
+        client._tools = [
+            make_tool("maps_geo", "geo geocode address"),
+            make_tool("maps_direction_driving", "direction route driving"),
+        ]
+
+        result = await client.plan_route(
+            origin="广州塔", destination="陈家祠", city="广州", mode="driving"
+        )
+
+        assert result.tool_name == "maps_direction_driving"
+        assert result.content["origin"] == "113.321,23.106"
+        assert result.content["destination"] == "113.321,23.106"
+        assert result.content["strategy"] == "0"
 
     asyncio.run(run())

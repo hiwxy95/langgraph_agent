@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
 
     database_url: str = Field(
-        default="postgresql+asyncpg://postgres:postgres@localhost:5432/travel_agent"
+        default="postgresql+asyncpg://postgres:1qazXSW%40@localhost:5432/travel_agent"
     )
     checkpoint_database_url: str | None = None
 

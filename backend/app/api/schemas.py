@@ -51,3 +51,13 @@ class AgentResponse(BaseModel):
     requires_human_approval: bool = False
     approval_payload: dict[str, Any] | None = None
     error: str | None = None
+
+
+class StreamEvent(BaseModel):
+    event: Literal["start", "token", "message", "approval", "done", "error"]
+    conversation_id: UUID
+    message: MessageOut | None = None
+    text: str | None = None
+    status: str | None = None
+    approval_payload: dict[str, Any] | None = None
+    error: str | None = None

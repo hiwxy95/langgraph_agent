@@ -36,5 +36,15 @@ export interface AgentResponse {
   error: string | null
 }
 
+export interface StreamEvent {
+  event: 'start' | 'token' | 'message' | 'approval' | 'done' | 'error'
+  conversation_id: string
+  message?: Message
+  text?: string
+  status?: string
+  approval_payload?: ApprovalPayload | null
+  error?: string | null
+}
+
 export type ModelProvider = 'auto' | 'deepseek' | 'qwen'
 export type ApprovalAction = 'approve' | 'revise' | 'cancel'
