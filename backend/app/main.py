@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.conversations import router as conversations_router
+from app.api.knowledge import router as knowledge_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -17,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(conversations_router, prefix=settings.api_prefix)
+app.include_router(knowledge_router, prefix=settings.api_prefix)
 
 
 @app.get("/health")

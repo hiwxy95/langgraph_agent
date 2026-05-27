@@ -1,1 +1,1 @@
-{"root":["./src/main.ts","./src/services/api.ts","./src/types/api.ts","./src/app.vue","./src/components/approvalpanel.vue","./src/components/chatcomposer.vue","./src/components/conversationlist.vue","./src/components/messagebubble.vue"],"version":"5.9.3"}
+{"root":["./src/main.ts","./src/services/api.ts","./src/types/api.ts","./src/app.vue","./src/components/approvalpanel.vue","./src/components/chatcomposer.vue","./src/components/conversationlist.vue","./src/components/knowledgepanel.vue","./src/components/messagebubble.vue"],"version":"5.9.3"}

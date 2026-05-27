@@ -36,6 +36,15 @@ async def get_conversation(
     return await session.scalar(stmt)
 
 
+async def delete_conversation(session: AsyncSession, conversation_id: uuid.UUID) -> bool:
+    conversation = await session.get(Conversation, conversation_id)
+    if not conversation:
+        return False
+    await session.delete(conversation)
+    await session.commit()
+    return True
+
+
 async def add_message(
     session: AsyncSession,
     conversation_id: uuid.UUID,

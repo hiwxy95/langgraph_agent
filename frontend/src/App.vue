@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { BookOpenText, MessagesSquare } from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import ApprovalPanel from './components/ApprovalPanel.vue'
 import ChatComposer from './components/ChatComposer.vue'
 import ConversationList from './components/ConversationList.vue'
+import KnowledgePanel from './components/KnowledgePanel.vue'
 import MessageBubble from './components/MessageBubble.vue'
 import {
   createConversation,
+  createKnowledgeDocument,
+  deleteConversation,
+  deleteKnowledgeDocument,
   getConversation,
   listConversations,
+  listKnowledgeDocuments,
   streamMessage,
   submitApproval,
+  uploadKnowledgeDocument,
 } from './services/api'
 import type {
   AgentResponse,
   ApprovalAction,
   ApprovalPayload,
   Conversation,
+  KnowledgeCategory,
+  KnowledgeDocument,
   Message,
   ModelProvider,
   StreamEvent,
@@ -32,12 +41,23 @@ const error = ref<string | null>(null)
 const modelProvider = ref<ModelProvider>('auto')
 const messageViewport = ref<HTMLElement | null>(null)
 const streamingMessageId = ref<string | null>(null)
+const knowledgeDocuments = ref<KnowledgeDocument[]>([])
+const loadingKnowledge = ref(false)
+const submittingKnowledge = ref(false)
+const currentPage = ref<'chat' | 'knowledge'>('chat')
 
 const activeConversation = computed(() =>
   conversations.value.find((conversation) => conversation.id === activeId.value) ?? null,
 )
 
 onMounted(async () => {
+  syncPageFromLocation()
+  window.addEventListener('popstate', syncPageFromLocation)
+
+  if (currentPage.value === 'knowledge') {
+    await refreshKnowledge()
+  }
+
   await refreshConversations()
   if (conversations.value.length > 0) {
     await selectConversation(conversations.value[0].id)
@@ -45,6 +65,26 @@ onMounted(async () => {
     await handleCreateConversation()
   }
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('popstate', syncPageFromLocation)
+})
+
+function syncPageFromLocation(): void {
+  currentPage.value = window.location.pathname.startsWith('/knowledge') ? 'knowledge' : 'chat'
+}
+
+async function navigate(page: 'chat' | 'knowledge'): Promise<void> {
+  const path = page === 'knowledge' ? '/knowledge' : '/'
+  if (window.location.pathname !== path) {
+    window.history.pushState({}, '', path)
+  }
+  currentPage.value = page
+  error.value = null
+  if (page === 'knowledge' && knowledgeDocuments.value.length === 0) {
+    await refreshKnowledge()
+  }
+}
 
 async function refreshConversations(): Promise<void> {
   loadingList.value = true
@@ -54,6 +94,66 @@ async function refreshConversations(): Promise<void> {
     error.value = normalizeError(err)
   } finally {
     loadingList.value = false
+  }
+}
+
+async function refreshKnowledge(category?: KnowledgeCategory | '', q?: string): Promise<void> {
+  loadingKnowledge.value = true
+  error.value = null
+  try {
+    knowledgeDocuments.value = await listKnowledgeDocuments(category, q)
+  } catch (err) {
+    error.value = normalizeError(err)
+  } finally {
+    loadingKnowledge.value = false
+  }
+}
+
+async function handleCreateKnowledge(payload: {
+  title: string
+  category: KnowledgeCategory
+  content: string
+  source_url?: string
+}): Promise<void> {
+  submittingKnowledge.value = true
+  error.value = null
+  try {
+    await createKnowledgeDocument(payload)
+    await refreshKnowledge()
+  } catch (err) {
+    error.value = normalizeError(err)
+  } finally {
+    submittingKnowledge.value = false
+  }
+}
+
+async function handleUploadKnowledge(payload: {
+  title: string
+  category: KnowledgeCategory
+  file: File
+}): Promise<void> {
+  submittingKnowledge.value = true
+  error.value = null
+  try {
+    await uploadKnowledgeDocument(payload)
+    await refreshKnowledge()
+  } catch (err) {
+    error.value = normalizeError(err)
+  } finally {
+    submittingKnowledge.value = false
+  }
+}
+
+async function handleDeleteKnowledge(id: string): Promise<void> {
+  submittingKnowledge.value = true
+  error.value = null
+  try {
+    await deleteKnowledgeDocument(id)
+    knowledgeDocuments.value = knowledgeDocuments.value.filter((document) => document.id !== id)
+  } catch (err) {
+    error.value = normalizeError(err)
+  } finally {
+    submittingKnowledge.value = false
   }
 }
 
@@ -82,6 +182,29 @@ async function selectConversation(id: string): Promise<void> {
     error.value = normalizeError(err)
   } finally {
     loadingConversation.value = false
+  }
+}
+
+async function handleDeleteConversation(id: string): Promise<void> {
+  error.value = null
+  try {
+    await deleteConversation(id)
+    conversations.value = conversations.value.filter((conversation) => conversation.id !== id)
+
+    if (activeId.value !== id) return
+
+    const nextConversation = conversations.value[0]
+    if (nextConversation) {
+      await selectConversation(nextConversation.id)
+      return
+    }
+
+    activeId.value = null
+    messages.value = []
+    pendingApproval.value = null
+    await handleCreateConversation()
+  } catch (err) {
+    error.value = normalizeError(err)
   }
 }
 
@@ -208,52 +331,87 @@ function normalizeError(err: unknown): string {
 </script>
 
 <template>
-  <main class="app-shell">
-    <ConversationList
-      :conversations="conversations"
-      :active-id="activeId"
-      :loading="loadingList"
-      @create="handleCreateConversation"
-      @select="selectConversation"
-    />
+  <main class="app-root">
+    <nav class="app-nav" aria-label="主导航">
+      <button
+        type="button"
+        :class="{ active: currentPage === 'chat' }"
+        @click="navigate('chat')"
+      >
+        <MessagesSquare :size="18" />
+        智能对话
+      </button>
+      <button
+        type="button"
+        :class="{ active: currentPage === 'knowledge' }"
+        @click="navigate('knowledge')"
+      >
+        <BookOpenText :size="18" />
+        资料库
+      </button>
+    </nav>
 
-    <section class="chat-panel">
-      <header class="chat-header">
-        <div>
-          <h2>{{ activeConversation?.title || '新的文旅对话' }}</h2>
-          <p>{{ activeConversation?.status || 'active' }}</p>
-        </div>
-      </header>
+    <section v-if="currentPage === 'chat'" class="chat-shell">
+      <ConversationList
+        :conversations="conversations"
+        :active-id="activeId"
+        :loading="loadingList"
+        @create="handleCreateConversation"
+        @select="selectConversation"
+        @delete="handleDeleteConversation"
+      />
 
-      <div ref="messageViewport" class="message-viewport">
-        <div v-if="loadingConversation" class="state-line">加载对话中...</div>
-        <template v-else>
-          <div v-if="messages.length === 0" class="welcome">
-            <h3>从一句需求开始</h3>
-            <p>例如：帮我规划广州两日游，想看历史建筑和夜景，预算中等。</p>
+      <section class="chat-panel">
+        <header class="chat-header">
+          <div>
+            <h2>{{ activeConversation?.title || '新的文旅对话' }}</h2>
+            <p>{{ activeConversation?.status || 'active' }}</p>
           </div>
-          <MessageBubble
-            v-for="message in messages"
-            :key="message.id || message.content"
-            :message="message"
-          />
-          <div v-if="sending" class="state-line">智能体处理中...</div>
-          <div v-if="error" class="error-line">{{ error }}</div>
-        </template>
-      </div>
+        </header>
 
-      <ApprovalPanel
-        v-if="pendingApproval"
-        :payload="pendingApproval"
-        :submitting="sending"
-        @submit="handleApproval"
-      />
+        <div ref="messageViewport" class="message-viewport">
+          <div v-if="loadingConversation" class="state-line">加载对话中...</div>
+          <template v-else>
+            <div v-if="messages.length === 0" class="welcome">
+              <h3>从一句需求开始</h3>
+              <p>例如：帮我规划广州两日游，想看历史建筑和夜景，预算中等。</p>
+            </div>
+            <MessageBubble
+              v-for="message in messages"
+              :key="message.id || message.content"
+              :message="message"
+            />
+            <div v-if="sending" class="state-line">智能体处理中...</div>
+            <div v-if="error" class="error-line">{{ error }}</div>
+          </template>
+        </div>
 
-      <ChatComposer
-        v-model:model-provider="modelProvider"
-        :disabled="sending || !activeId"
-        @send="handleSend"
+        <ApprovalPanel
+          v-if="pendingApproval"
+          :payload="pendingApproval"
+          :submitting="sending"
+          @submit="handleApproval"
+        />
+
+        <ChatComposer
+          v-model:model-provider="modelProvider"
+          :disabled="sending || !activeId"
+          @send="handleSend"
+        />
+      </section>
+    </section>
+
+    <section v-else class="knowledge-page">
+      <KnowledgePanel
+        :documents="knowledgeDocuments"
+        :loading="loadingKnowledge"
+        :submitting="submittingKnowledge"
+        @refresh="refreshKnowledge"
+        @create="handleCreateKnowledge"
+        @upload="handleUploadKnowledge"
+        @delete="handleDeleteKnowledge"
       />
+      <div v-if="error" class="knowledge-page-error error-line">{{ error }}</div>
     </section>
   </main>
 </template>

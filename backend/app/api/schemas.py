@@ -61,3 +61,65 @@ class StreamEvent(BaseModel):
     status: str | None = None
     approval_payload: dict[str, Any] | None = None
     error: str | None = None
+
+
+KnowledgeCategory = Literal[
+    "tourism_material",
+    "policy_document",
+    "attraction_intro",
+    "hotel_description",
+]
+
+
+class KnowledgeDocumentCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=240)
+    category: KnowledgeCategory
+    content: str = Field(min_length=1)
+    source_url: str | None = None
+
+
+class KnowledgeDocumentOut(BaseModel):
+    id: UUID
+    title: str
+    category: KnowledgeCategory
+    source_type: str
+    source_name: str | None = None
+    source_url: str | None = None
+    status: str
+    chunk_count: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeChunkOut(BaseModel):
+    id: UUID
+    document_id: UUID
+    chunk_index: int
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+
+
+class KnowledgeDocumentDetailOut(KnowledgeDocumentOut):
+    content: str
+    chunks: list[KnowledgeChunkOut] = Field(default_factory=list)
+
+
+class KnowledgeSearchRequest(BaseModel):
+    query: str = Field(min_length=1)
+    category: KnowledgeCategory | None = None
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class KnowledgeSearchResult(BaseModel):
+    chunk_id: UUID
+    document_id: UUID
+    title: str
+    category: KnowledgeCategory
+    category_label: str
+    chunk_index: int
+    content: str
+    similarity: float
+    source_name: str | None = None
+    source_url: str | None = None

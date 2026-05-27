@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     dashscope_api_key: str | None = None
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     qwen_model: str = "qwen-plus"
+    dashscope_embedding_model: str = "text-embedding-v4"
+    embedding_dimensions: int = 1024
+    embedding_batch_size: int = 10
+    rag_top_k: int = 5
 
     amap_maps_api_key: str | None = None
     amap_mcp_url: str = "https://mcp.amap.com/mcp?key={AMAP_MAPS_API_KEY}"

@@ -3,6 +3,8 @@ import type {
   ApprovalAction,
   Conversation,
   ConversationDetail,
+  KnowledgeCategory,
+  KnowledgeDocument,
   ModelProvider,
   StreamEvent,
 } from '../types/api'
@@ -16,6 +18,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const body = await response.text()
     throw new Error(body || `HTTP ${response.status}`)
+  }
+  if (response.status === 204) {
+    return undefined as T
   }
   return response.json() as Promise<T>
 }
@@ -34,6 +39,12 @@ export async function listConversations(): Promise<Conversation[]> {
 
 export async function getConversation(id: string): Promise<ConversationDetail> {
   return request(`/api/conversations/${id}`)
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  await request<void>(`/api/conversations/${id}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function sendMessage(
@@ -96,5 +107,50 @@ export async function submitApproval(
     method: 'POST',
     headers: jsonHeaders,
     body: JSON.stringify({ action, comment }),
+  })
+}
+
+export async function listKnowledgeDocuments(
+  category?: KnowledgeCategory | '',
+  q?: string,
+): Promise<KnowledgeDocument[]> {
+  const params = new URLSearchParams()
+  if (category) params.set('category', category)
+  if (q?.trim()) params.set('q', q.trim())
+  const query = params.toString()
+  return request(`/api/knowledge/documents${query ? `?${query}` : ''}`)
+}
+
+export async function createKnowledgeDocument(input: {
+  title: string
+  category: KnowledgeCategory
+  content: string
+  source_url?: string
+}): Promise<KnowledgeDocument> {
+  return request('/api/knowledge/documents', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify(input),
+  })
+}
+
+export async function uploadKnowledgeDocument(input: {
+  title: string
+  category: KnowledgeCategory
+  file: File
+}): Promise<KnowledgeDocument> {
+  const formData = new FormData()
+  formData.set('title', input.title)
+  formData.set('category', input.category)
+  formData.set('file', input.file)
+  return request('/api/knowledge/documents/upload', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export async function deleteKnowledgeDocument(id: string): Promise<void> {
+  await request<void>(`/api/knowledge/documents/${id}`, {
+    method: 'DELETE',
   })
 }

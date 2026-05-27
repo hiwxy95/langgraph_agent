@@ -16,6 +16,11 @@ from app.core.config import ModelProvider, Settings, get_settings
 from app.llm.router import LLMRouter
 from app.mcp.amap import AmapMCPClient, normalize_tool_content
 
+RAG_PROMPT = (
+    "回答时请优先参考“知识库依据”。如果依据不足，请明确说明哪些信息来自资料、"
+    "哪些需要进一步确认。回答末尾用“依据：”简洁列出使用到的文档标题和片段编号。"
+)
+
 
 class TravelAgent:
     def __init__(
@@ -34,6 +39,7 @@ class TravelAgent:
         user_message: str,
         model_provider: ModelProvider = "auto",
         history_messages: list[Any] | None = None,
+        knowledge_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         async with self._compiled_graph() as graph:
             config = self._thread_config(conversation_id)
@@ -44,6 +50,7 @@ class TravelAgent:
                         graph, config, history_messages, user_message
                     ),
                     "model_provider": model_provider,
+                    "knowledge_context": knowledge_context or {},
                 },
                 config=config,
             )
@@ -55,6 +62,7 @@ class TravelAgent:
         user_message: str,
         model_provider: ModelProvider = "auto",
         history_messages: list[Any] | None = None,
+        knowledge_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         async with self._compiled_graph() as graph:
             config = self._thread_config(conversation_id)
@@ -66,6 +74,7 @@ class TravelAgent:
                 "conversation_id": conversation_id,
                 "messages": input_messages,
                 "model_provider": model_provider,
+                "knowledge_context": knowledge_context or {},
             }
             state.update(await self._classify_input(state))
 
@@ -117,6 +126,7 @@ class TravelAgent:
             "conversation_id": conversation_id,
             "messages": [],
             "model_provider": model_provider,
+            "knowledge_context": {},
             "pending_approval": {
                 "kind": "itinerary_confirmation",
                 "draft": draft,
@@ -339,6 +349,13 @@ class TravelAgent:
                 )
             ),
         ]
+        knowledge_text = _knowledge_context_text(state)
+        if knowledge_text:
+            messages.insert(
+                1,
+                SystemMessage(content=f"{RAG_PROMPT}\n\n知识库依据：\n{knowledge_text}"),
+            )
+
         async for kind, payload in self.llm_router.stream(
             messages,
             task_type="itinerary_planning",
@@ -355,6 +372,7 @@ class TravelAgent:
                         "provider": result.provider,
                         "model": result.model,
                         "fallback_from": result.fallback_from,
+                        "knowledge_sources": _knowledge_sources(state),
                     },
                 )
 
@@ -363,7 +381,11 @@ class TravelAgent:
     ) -> AsyncIterator[tuple[str, str | dict[str, Any]]]:
         review = (state.get("pending_approval") or {}).get("review")
         if not review:
-            messages = [SystemMessage(content=SYSTEM_PROMPT), *state.get("messages", [])]
+            system_content = f"{SYSTEM_PROMPT}\n\n{RAG_PROMPT}"
+            knowledge_text = _knowledge_context_text(state)
+            if knowledge_text:
+                system_content = f"{system_content}\n\n知识库依据：\n{knowledge_text}"
+            messages = [SystemMessage(content=system_content), *state.get("messages", [])]
             async for kind, payload in self.llm_router.stream(
                 messages,
                 task_type="chat",
@@ -379,6 +401,7 @@ class TravelAgent:
                             "provider": result.provider,
                             "model": result.model,
                             "fallback_from": result.fallback_from,
+                            "knowledge_sources": _knowledge_sources(state),
                         },
                     )
             return
@@ -409,6 +432,7 @@ class TravelAgent:
                         "provider": result.provider,
                         "model": result.model,
                         "fallback_from": result.fallback_from,
+                        "knowledge_sources": _knowledge_sources(state),
                     },
                 )
 
@@ -464,6 +488,7 @@ class TravelAgent:
                 "task_type": state.get("task_type"),
                 "route_target": state.get("route_target"),
                 "tool_results": state.get("tool_results") or {},
+                "knowledge_context": state.get("knowledge_context") or {},
                 "pending_approval": state.get("pending_approval"),
                 "final_answer": str(ai_message.content),
             },
@@ -515,6 +540,19 @@ def _messages_as_text(messages: list[Any]) -> str:
         if content:
             lines.append(f"{role}: {content}")
     return "\n".join(lines)
+
+
+def _knowledge_context_text(state: TravelAgentState) -> str:
+    context = state.get("knowledge_context") or {}
+    return str(context.get("text") or "").strip()
+
+
+def _knowledge_sources(state: TravelAgentState) -> list[dict[str, Any]]:
+    context = state.get("knowledge_context") or {}
+    sources = context.get("sources") or []
+    if isinstance(sources, list):
+        return [source for source in sources if isinstance(source, dict)]
+    return []
 
 
 async def _checkpoint_has_messages(graph: Any, config: dict[str, Any]) -> bool:

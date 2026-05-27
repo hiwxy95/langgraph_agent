@@ -48,3 +48,37 @@ export interface StreamEvent {
 
 export type ModelProvider = 'auto' | 'deepseek' | 'qwen'
 export type ApprovalAction = 'approve' | 'revise' | 'cancel'
+
+export type KnowledgeCategory =
+  | 'tourism_material'
+  | 'policy_document'
+  | 'attraction_intro'
+  | 'hotel_description'
+
+export interface KnowledgeDocument {
+  id: string
+  title: string
+  category: KnowledgeCategory
+  source_type: string
+  source_name: string | null
+  source_url: string | null
+  status: string
+  chunk_count: number
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface KnowledgeChunk {
+  id: string
+  document_id: string
+  chunk_index: number
+  content: string
+  metadata: Record<string, unknown>
+  created_at: string | null
+}
+
+export interface KnowledgeDocumentDetail extends KnowledgeDocument {
+  content: string
+  chunks: KnowledgeChunk[]
+}

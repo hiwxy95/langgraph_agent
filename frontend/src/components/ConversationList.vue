@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageSquarePlus } from 'lucide-vue-next'
+import { MessageSquarePlus, Trash2 } from 'lucide-vue-next'
 import type { Conversation } from '../types/api'
 
 defineProps<{
@@ -11,6 +11,7 @@ defineProps<{
 const emit = defineEmits<{
   create: []
   select: [id: string]
+  delete: [id: string]
 }>()
 
 function formatTime(value: string): string {
@@ -36,20 +37,29 @@ function formatTime(value: string): string {
     </div>
 
     <div class="conversation-list" aria-label="对话列表">
-      <button
+      <div
         v-for="conversation in conversations"
         :key="conversation.id"
         class="conversation-item"
         :class="{ active: conversation.id === activeId }"
-        type="button"
-        @click="emit('select', conversation.id)"
       >
-        <span class="conversation-title">{{ conversation.title }}</span>
-        <span class="conversation-meta">
-          <span>{{ conversation.status }}</span>
-          <span>{{ formatTime(conversation.updated_at) }}</span>
-        </span>
-      </button>
+        <button class="conversation-select" type="button" @click="emit('select', conversation.id)">
+          <span class="conversation-title">{{ conversation.title }}</span>
+          <span class="conversation-meta">
+            <span>{{ conversation.status }}</span>
+            <span>{{ formatTime(conversation.updated_at) }}</span>
+          </span>
+        </button>
+        <button
+          class="conversation-delete"
+          type="button"
+          title="删除对话"
+          aria-label="删除对话"
+          @click.stop="emit('delete', conversation.id)"
+        >
+          <Trash2 :size="16" />
+        </button>
+      </div>
 
       <div v-if="!loading && conversations.length === 0" class="empty-list">
         暂无对话

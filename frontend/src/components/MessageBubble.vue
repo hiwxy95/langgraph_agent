@@ -1,10 +1,23 @@
 <script setup lang="ts">
 import { Bot, UserRound } from 'lucide-vue-next'
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
+import { computed } from 'vue'
 import type { Message } from '../types/api'
 
-defineProps<{
+const props = defineProps<{
   message: Message
 }>()
+
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+})
+
+const renderedMarkdown = computed(() => {
+  if (props.message.role === 'user') return ''
+  return DOMPurify.sanitize(marked.parse(props.message.content, { async: false }) as string)
+})
 </script>
 
 <template>
@@ -14,7 +27,12 @@ defineProps<{
       <Bot v-else :size="18" />
     </div>
     <div class="message-body">
-      <div class="message-content">{{ message.content }}</div>
+      <div
+        v-if="message.role === 'assistant'"
+        class="message-content markdown-content"
+        v-html="renderedMarkdown"
+      />
+      <div v-else class="message-content">{{ message.content }}</div>
       <div v-if="message.metadata?.provider" class="message-meta">
         {{ message.metadata.provider }} / {{ message.metadata.model }}
       </div>

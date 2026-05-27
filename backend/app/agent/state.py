@@ -24,4 +24,5 @@ class TravelAgentState(TypedDict, total=False):
     model_provider: str
     task_type: str
     route_target: str
+    knowledge_context: dict[str, Any]
     error: str | None

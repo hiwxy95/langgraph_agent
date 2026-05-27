@@ -23,6 +23,7 @@ from app.api.schemas import (
 from app.db import repository
 from app.db.models import Conversation, Message
 from app.db.session import get_session
+from app.rag.service import KnowledgeService, build_rag_context
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -68,6 +69,18 @@ async def get_conversation(
     )
 
 
+@router.delete("/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    deleted = await repository.delete_conversation(session, conversation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    await _delete_langgraph_thread(str(conversation_id))
+
+
 @router.post("/{conversation_id}/messages", response_model=AgentResponse)
 async def send_message(
     conversation_id: uuid.UUID,
@@ -79,6 +92,7 @@ async def send_message(
         raise HTTPException(status_code=404, detail="Conversation not found.")
 
     await repository.add_message(session, conversation_id, "user", request.content)
+    knowledge_context = await _rag_context_for_message(session, request.content)
 
     agent = TravelAgent()
     try:
@@ -87,6 +101,7 @@ async def send_message(
             request.content,
             request.model_provider,
             history_messages=_history_to_langchain_messages(conversation.messages),
+            knowledge_context=knowledge_context,
         )
     except Exception as exc:
         await repository.add_message(
@@ -117,6 +132,7 @@ async def stream_message(
         raise HTTPException(status_code=404, detail="Conversation not found.")
 
     await repository.add_message(session, conversation_id, "user", request.content)
+    knowledge_context = await _rag_context_for_message(session, request.content)
     agent = TravelAgent()
 
     async def event_stream() -> AsyncIterator[str]:
@@ -139,6 +155,7 @@ async def stream_message(
                 request.content,
                 request.model_provider,
                 history_messages=_history_to_langchain_messages(conversation.messages),
+                knowledge_context=knowledge_context,
             ):
                 event_name = event.get("event")
                 if event_name == "token":
@@ -376,3 +393,29 @@ def _history_to_langchain_messages(messages: list[Message]) -> list[Any]:
         elif message.role == "assistant":
             converted.append(AIMessage(content=message.content))
     return converted
+
+
+async def _rag_context_for_message(
+    session: AsyncSession, content: str
+) -> dict[str, Any]:
+    service = KnowledgeService(session)
+    if not await service.has_active_documents():
+        return {}
+    context = build_rag_context(await service.search(content))
+    return {"text": context.text, "sources": context.sources}
+
+
+async def _delete_langgraph_thread(conversation_id: str) -> None:
+    try:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+        from app.core.config import get_settings
+
+        async with AsyncPostgresSaver.from_conn_string(
+            get_settings().checkpoint_url
+        ) as checkpointer:
+            delete_thread = getattr(checkpointer, "adelete_thread", None)
+            if delete_thread:
+                await delete_thread(conversation_id)
+    except Exception:
+        return
