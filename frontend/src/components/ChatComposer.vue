@@ -25,13 +25,16 @@ function submit(): void {
 
 <template>
   <form class="composer" @submit.prevent="submit">
-    <textarea
-      v-model="text"
-      :disabled="disabled"
-      rows="2"
-      placeholder="输入目的地、日期、人数、预算或偏好"
-      @keydown.enter.exact.prevent="submit"
-    />
+    <div class="composer-main">
+      <span class="page-kicker">Trip Prompt</span>
+      <textarea
+        v-model="text"
+        :disabled="disabled"
+        rows="2"
+        placeholder="输入目的地、日期、人数、预算、出行风格或特别偏好"
+        @keydown.enter.exact.prevent="submit"
+      />
+    </div>
     <div class="composer-actions">
       <select
         :value="modelProvider"
@@ -42,7 +45,7 @@ function submit(): void {
         <option value="deepseek">DeepSeek</option>
         <option value="qwen">通义千问</option>
       </select>
-      <button class="primary icon-text" type="submit" :disabled="disabled || !text.trim()">
+      <button class="primary icon-text send-button" type="submit" :disabled="disabled || !text.trim()">
         <SendHorizontal :size="17" />
         发送
       </button>

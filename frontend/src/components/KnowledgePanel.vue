@@ -88,6 +88,7 @@ function categoryName(value: KnowledgeCategory): string {
   <div class="knowledge-panel">
     <header class="knowledge-header">
       <div>
+        <span class="page-kicker">Content Operations</span>
         <h1>资料库</h1>
         <p>录入文旅资料、政策文档、景区介绍和酒店说明，作为 RAG 检索依据。</p>
       </div>
@@ -97,7 +98,14 @@ function categoryName(value: KnowledgeCategory): string {
     </header>
 
     <div class="knowledge-layout">
-      <section class="knowledge-editor" aria-label="资料录入">
+      <section class="knowledge-editor panel-surface" aria-label="资料录入">
+        <div class="panel-heading">
+          <div>
+            <span class="page-kicker">Editor</span>
+            <h3>新增资料源</h3>
+          </div>
+        </div>
+
         <div class="segmented">
           <button type="button" :class="{ active: mode === 'text' }" @click="mode = 'text'">
             <FilePlus2 :size="16" />
@@ -153,7 +161,14 @@ function categoryName(value: KnowledgeCategory): string {
         </template>
       </section>
 
-      <section class="knowledge-browser" aria-label="资料列表">
+      <section class="knowledge-browser panel-surface" aria-label="资料列表">
+        <div class="panel-heading">
+          <div>
+            <span class="page-kicker">Library</span>
+            <h3>资料浏览</h3>
+          </div>
+        </div>
+
         <div class="knowledge-controls">
           <select v-model="filterCategory" @change="refresh">
             <option value="">全部分类</option>
@@ -170,7 +185,7 @@ function categoryName(value: KnowledgeCategory): string {
         </div>
 
         <div class="knowledge-list">
-          <div v-if="props.loading" class="empty-list">加载资料中...</div>
+          <div v-if="props.loading" class="empty-list state-card">加载资料中...</div>
           <article v-for="document in props.documents" :key="document.id" class="knowledge-item">
             <div>
               <h3>{{ document.title }}</h3>
@@ -190,7 +205,7 @@ function categoryName(value: KnowledgeCategory): string {
               <Trash2 :size="16" />
             </button>
           </article>
-          <div v-if="!props.loading && props.documents.length === 0" class="empty-list">
+          <div v-if="!props.loading && props.documents.length === 0" class="empty-list state-card">
             暂无资料
           </div>
         </div>

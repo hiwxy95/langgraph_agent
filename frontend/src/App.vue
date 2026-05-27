@@ -332,26 +332,38 @@ function normalizeError(err: unknown): string {
 
 <template>
   <main class="app-root">
+    <div class="app-backdrop" aria-hidden="true">
+      <div class="orb orb-one"></div>
+      <div class="orb orb-two"></div>
+      <div class="orb orb-three"></div>
+    </div>
+
     <nav class="app-nav" aria-label="主导航">
-      <button
-        type="button"
-        :class="{ active: currentPage === 'chat' }"
-        @click="navigate('chat')"
-      >
-        <MessagesSquare :size="18" />
-        智能对话
-      </button>
-      <button
-        type="button"
-        :class="{ active: currentPage === 'knowledge' }"
-        @click="navigate('knowledge')"
-      >
-        <BookOpenText :size="18" />
-        资料库
-      </button>
+      <div class="app-brand">
+        <span class="app-brand-kicker">Lingnan Travel Copilot</span>
+        <strong>活力广东 · 文旅智能体</strong>
+      </div>
+      <div class="app-nav-tabs">
+        <button
+          type="button"
+          :class="{ active: currentPage === 'chat' }"
+          @click="navigate('chat')"
+        >
+          <MessagesSquare :size="18" />
+          智能对话
+        </button>
+        <button
+          type="button"
+          :class="{ active: currentPage === 'knowledge' }"
+          @click="navigate('knowledge')"
+        >
+          <BookOpenText :size="18" />
+          资料库
+        </button>
+      </div>
     </nav>
 
-    <section v-if="currentPage === 'chat'" class="chat-shell">
+    <section v-if="currentPage === 'chat'" class="chat-shell page-shell">
       <ConversationList
         :conversations="conversations"
         :active-id="activeId"
@@ -361,27 +373,38 @@ function normalizeError(err: unknown): string {
         @delete="handleDeleteConversation"
       />
 
-      <section class="chat-panel">
+      <section class="chat-panel panel-surface">
         <header class="chat-header">
-          <div>
+          <div class="chat-header-copy">
+            <span class="page-kicker">智能行程工作台</span>
             <h2>{{ activeConversation?.title || '新的文旅对话' }}</h2>
-            <p>{{ activeConversation?.status || 'active' }}</p>
+            <p>告诉我你的城市、日期、预算与偏好，我会生成更完整的广东文旅方案。</p>
+          </div>
+          <div class="chat-header-meta">
+            <span class="status-pill">{{ activeConversation?.status || 'active' }}</span>
+            <span class="meta-pill">{{ messages.length }} 条消息</span>
           </div>
         </header>
 
         <div ref="messageViewport" class="message-viewport">
-          <div v-if="loadingConversation" class="state-line">加载对话中...</div>
+          <div v-if="loadingConversation" class="state-line state-card">加载对话中...</div>
           <template v-else>
-            <div v-if="messages.length === 0" class="welcome">
-              <h3>从一句需求开始</h3>
-              <p>例如：帮我规划广州两日游，想看历史建筑和夜景，预算中等。</p>
+            <div v-if="messages.length === 0" class="welcome hero-card">
+              <span class="page-kicker">你的旅行策划台已就绪</span>
+              <h3>从一句需求开始，生成更像专业顾问的路线方案。</h3>
+              <p>例如：帮我规划广州两日游，想看历史建筑和夜景，预算中等，住在天河附近。</p>
+              <div class="welcome-suggestions">
+                <span>周末城市微度假</span>
+                <span>亲子酒店+景点推荐</span>
+                <span>文化街区夜游路线</span>
+              </div>
             </div>
             <MessageBubble
               v-for="message in messages"
               :key="message.id || message.content"
               :message="message"
             />
-            <div v-if="sending" class="state-line">智能体处理中...</div>
+            <div v-if="sending" class="state-line state-card">智能体处理中...</div>
             <div v-if="error" class="error-line">{{ error }}</div>
           </template>
         </div>
@@ -401,7 +424,12 @@ function normalizeError(err: unknown): string {
       </section>
     </section>
 
-    <section v-else class="knowledge-page">
+    <section v-else class="knowledge-page page-shell">
+      <div class="page-hero panel-surface knowledge-hero">
+        <span class="page-kicker">Knowledge Studio</span>
+        <h2>资料库与 RAG 内容运营台</h2>
+        <p>集中维护政策、景区、酒店和文旅资料，让智能体给出更可靠的回答。</p>
+      </div>
       <KnowledgePanel
         :documents="knowledgeDocuments"
         :loading="loadingKnowledge"

@@ -25,13 +25,14 @@ function formatTime(value: string): string {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar panel-surface">
     <div class="sidebar-header">
       <div>
-        <h1>文旅智能体</h1>
-        <p>广东路线、酒店、景点规划</p>
+        <span class="page-kicker">Travel Sessions</span>
+        <h1>灵感会话</h1>
+        <p>广东路线、酒店、景点与城市体验策划</p>
       </div>
-      <button class="icon-button" type="button" title="新建对话" @click="emit('create')">
+      <button class="icon-button primary-icon" type="button" title="新建对话" @click="emit('create')">
         <MessageSquarePlus :size="20" />
       </button>
     </div>
@@ -46,7 +47,7 @@ function formatTime(value: string): string {
         <button class="conversation-select" type="button" @click="emit('select', conversation.id)">
           <span class="conversation-title">{{ conversation.title }}</span>
           <span class="conversation-meta">
-            <span>{{ conversation.status }}</span>
+            <span class="conversation-status">{{ conversation.status }}</span>
             <span>{{ formatTime(conversation.updated_at) }}</span>
           </span>
         </button>
@@ -61,10 +62,10 @@ function formatTime(value: string): string {
         </button>
       </div>
 
-      <div v-if="!loading && conversations.length === 0" class="empty-list">
-        暂无对话
+      <div v-if="!loading && conversations.length === 0" class="empty-list state-card">
+        暂无对话，点击右上角开始新的旅行策划。
       </div>
-      <div v-if="loading" class="empty-list">加载中...</div>
+      <div v-if="loading" class="empty-list state-card">加载中...</div>
     </div>
   </aside>
 </template>

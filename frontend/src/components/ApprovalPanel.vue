@@ -18,6 +18,7 @@ const comment = ref('')
 <template>
   <section class="approval-panel">
     <div class="approval-main">
+      <span class="page-kicker">Human in the loop</span>
       <h2>需要人工确认</h2>
       <p>{{ payload.question || '请确认是否继续采用当前方案。' }}</p>
       <pre v-if="payload.draft">{{ payload.draft }}</pre>
